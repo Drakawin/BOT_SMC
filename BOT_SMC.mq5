@@ -21,6 +21,7 @@
 #include <Infrastructure\CLoggingService.mqh>
 #include <Infrastructure\CErrorHandlingService.mqh>
 #include <Infrastructure\CClockTimeService.mqh>
+#include <Infrastructure\CBootstrapEngine.mqh>
 #include <Infrastructure\CUtilityService.mqh>
 #include <Infrastructure\CIdentifierGeneration.mqh>
 #include <Infrastructure\CVersionManagement.mqh>

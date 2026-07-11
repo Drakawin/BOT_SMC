@@ -81,7 +81,7 @@ private:
 
    //--- Private initialization helpers
    void   InitializeLockedConstants(void);
-   bool   ValidateRuntimeParameters(const ConfigInput &input);
+   bool   ValidateRuntimeParameters(const ConfigInput &configInput);
    void   SetValidationError(const string module, const string message);
 
 public:
@@ -89,7 +89,7 @@ public:
                     ~CConfigurationService(void);
 
    //--- Initialization
-   bool   Initialize(const ConfigInput &input);
+   bool   Initialize(const ConfigInput &configInput);
    bool   IsValid(void) const;
    string GetValidationError(void) const;
    bool   IsInitialized(void) const;
@@ -224,59 +224,59 @@ void CConfigurationService::SetValidationError(const string module, const string
 //| Validate runtime parameters                                      |
 //| Returns true if all validation checks pass                       |
 //+------------------------------------------------------------------+
-bool CConfigurationService::ValidateRuntimeParameters(const ConfigInput &input)
+bool CConfigurationService::ValidateRuntimeParameters(const ConfigInput &configInput)
 {
    //--- Broker UTC offset validation
-   if(input.brokerUTCOffset < -12 || input.brokerUTCOffset > 14)
+   if(configInput.brokerUTCOffset < -12 || configInput.brokerUTCOffset > 14)
    {
       SetValidationError("Configuration", "BrokerUTCOffset out of range (-12 to +14)");
       return(false);
    }
 
    //--- Magic number validation
-   if(input.magicNumber <= 0)
+   if(configInput.magicNumber <= 0)
    {
       SetValidationError("Configuration", "MagicNumber must be positive");
       return(false);
    }
 
    //--- Slippage cap validation
-   if(input.slippageCap < 0)
+   if(configInput.slippageCap < 0)
    {
       SetValidationError("Configuration", "SlippageCap must be non-negative");
       return(false);
    }
 
    //--- Log level validation (0=TRACE through 5=FATAL)
-   if(input.logLevel < 0 || input.logLevel > 5)
+   if(configInput.logLevel < 0 || configInput.logLevel > 5)
    {
       SetValidationError("Configuration", "LogLevel out of range (0-5)");
       return(false);
    }
 
    //--- Log retention validation
-   if(input.logRetentionDays < 1)
+   if(configInput.logRetentionDays < 1)
    {
       SetValidationError("Configuration", "LogRetentionDays must be at least 1");
       return(false);
    }
 
    //--- Auto-save interval validation
-   if(input.autoSaveInterval < 1)
+   if(configInput.autoSaveInterval < 1)
    {
       SetValidationError("Configuration", "AutoSaveInterval must be at least 1 second");
       return(false);
    }
 
    //--- Log path validation
-   if(StringLen(input.logPath) == 0)
+   if(StringLen(configInput.logPath) == 0)
    {
       SetValidationError("Configuration", "LogPath must not be empty");
       return(false);
    }
 
    //--- State path validation
-   if(StringLen(input.statePath) == 0)
+   if(StringLen(configInput.statePath) == 0)
    {
       SetValidationError("Configuration", "StatePath must not be empty");
       return(false);
@@ -289,23 +289,23 @@ bool CConfigurationService::ValidateRuntimeParameters(const ConfigInput &input)
 //| Initialize: load locked constants and validate runtime inputs    |
 //| Returns true if initialization succeeds                          |
 //+------------------------------------------------------------------+
-bool CConfigurationService::Initialize(const ConfigInput &input)
+bool CConfigurationService::Initialize(const ConfigInput &configInput)
 {
    //--- Load locked constants
    InitializeLockedConstants();
 
    //--- Store runtime configuration
-   m_brokerUTCOffset  = input.brokerUTCOffset;
-   m_magicNumber      = input.magicNumber;
-   m_slippageCap      = input.slippageCap;
-   m_logLevel         = input.logLevel;
-   m_logPath          = input.logPath;
-   m_logRetentionDays = input.logRetentionDays;
-   m_statePath        = input.statePath;
-   m_autoSaveInterval = input.autoSaveInterval;
+   m_brokerUTCOffset  = configInput.brokerUTCOffset;
+   m_magicNumber      = configInput.magicNumber;
+   m_slippageCap      = configInput.slippageCap;
+   m_logLevel         = configInput.logLevel;
+   m_logPath          = configInput.logPath;
+   m_logRetentionDays = configInput.logRetentionDays;
+   m_statePath        = configInput.statePath;
+   m_autoSaveInterval = configInput.autoSaveInterval;
 
    //--- Validate runtime parameters
-   m_valid = ValidateRuntimeParameters(input);
+   m_valid = ValidateRuntimeParameters(configInput);
 
    m_initialized = true;
    return(m_valid);

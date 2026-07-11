@@ -1,0 +1,14 @@
+# MetaTrader 5
+*.ex5
+*.log
+
+# Windows
+*.lnk
+Thumbs.db
+Desktop.ini
+
+# VS Code
+.vscode/
+
+# JetBrains
+.idea/

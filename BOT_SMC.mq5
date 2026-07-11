@@ -82,11 +82,29 @@
 #include <TradeManagement\CTradeStatisticsAnalytics.mqh>
 
 //+------------------------------------------------------------------+
+//| Global Instances                                                 |
+//+------------------------------------------------------------------+
+CBootstrapEngine Bootstrap;
+
+//+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   return(INIT_SUCCEEDED);
+   Print("BOT_SMC starting...");
+   
+   ENUM_BOOTSTRAP_STATUS status = Bootstrap.Initialize();
+   
+   if(status == BOOTSTRAP_STATUS_SUCCESS)
+   {
+      Print("Bootstrap initialization successful");
+      return(INIT_SUCCEEDED);
+   }
+   else
+   {
+      Print("Bootstrap initialization failed: ", EnumToString(status));
+      return(INIT_FAILED);
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -101,5 +119,7 @@ void OnTick()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   Print("BOT_SMC shutting down...");
+   Print("BOT_SMC shutdown complete");
 }
 //+------------------------------------------------------------------+

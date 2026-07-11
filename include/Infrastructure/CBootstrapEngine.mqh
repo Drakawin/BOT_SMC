@@ -233,29 +233,45 @@ bool CBootstrapEngine::InitializeClock()
 //+------------------------------------------------------------------+
 ENUM_BOOTSTRAP_STATUS CBootstrapEngine::Initialize()
 {
+   // Initialize Configuration Service
+   Print("Initializing Configuration Service...");
    if(!InitializeConfiguration())
    {
+      Print("Configuration Service FAILED");
       CleanupServices();
       return m_status;
    }
+   Print("Configuration Service OK");
    
+   // Initialize Logging Service
+   Print("Initializing Logging Service...");
    if(!InitializeLogging())
    {
+      Print("Logging Service FAILED");
       CleanupServices();
       return m_status;
    }
+   Print("Logging Service OK");
    
+   // Initialize Error Handling Service
+   Print("Initializing Error Handling Service...");
    if(!InitializeErrorHandling())
    {
+      Print("Error Handling Service FAILED");
       CleanupServices();
       return m_status;
    }
+   Print("Error Handling Service OK");
    
+   // Initialize Clock Service
+   Print("Initializing Clock Service...");
    if(!InitializeClock())
    {
+      Print("Clock Service FAILED");
       CleanupServices();
       return m_status;
    }
+   Print("Clock Service OK");
    
    m_initialized = true;
    SetStatus(BOOTSTRAP_STATUS_SUCCESS, "All infrastructure services initialized successfully");

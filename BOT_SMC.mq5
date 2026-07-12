@@ -89,6 +89,7 @@ CMarketStructureEngine MarketStructure;
 CBOSEngine BOSEngine;
 CCHoCHEngine CHoCHEngine;
 CLiquidityEngine LiquidityEngine;
+CFVGEngine FVGEngine;
 
 datetime g_lastBOSTime = 0;
 datetime g_lastCHoCHTime = 0;
@@ -137,6 +138,14 @@ int OnInit()
          return(INIT_FAILED);
       }
       Print("LiquidityEngine initialized successfully");
+      
+      // Initialize FVG Engine
+      if(!FVGEngine.Initialize(Symbol(), Period(), 10, 5))
+      {
+         Print("FVGEngine initialization failed");
+         return(INIT_FAILED);
+      }
+      Print("FVGEngine initialized successfully");
       
       return(INIT_SUCCEEDED);
    }
@@ -198,12 +207,20 @@ void OnTick()
    // Sweep Engine Evaluation on bar 1 (last closed bar)
    // We do this via periodic check on new bar open, or directly every tick checking bar 1.
    // To avoid duplicate checks on the same bar, we use a static timestamp:
-   static datetime lastSweepCheckTime = 0;
+   static datetime lastClosedBarTime = 0;
    datetime bar1Time = iTime(Symbol(), Period(), 1);
-   if(bar1Time != 0 && bar1Time != lastSweepCheckTime)
+   if(bar1Time != 0 && bar1Time != lastClosedBarTime)
    {
-      lastSweepCheckTime = bar1Time;
+      lastClosedBarTime = bar1Time;
+      
+      // Check Liquidity Sweeps
       LiquidityEngine.CheckSweepsAndConsumption(1);
+      
+      // Detect new FVGs based on the closed pattern ending at bar 1
+      FVGEngine.DetectFVG(1);
+      
+      // Check FVG Fills using the newly closed bar
+      FVGEngine.CheckFills(1);
    }
 
    // Detect BOS on bar 1 (last closed bar)

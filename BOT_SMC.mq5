@@ -87,7 +87,9 @@
 CBootstrapEngine Bootstrap;
 CMarketStructureEngine MarketStructure;
 CBOSEngine BOSEngine;
+CCHoCHEngine CHoCHEngine;
 datetime g_lastBOSTime = 0;
+datetime g_lastCHoCHTime = 0;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -117,6 +119,14 @@ int OnInit()
          return(INIT_FAILED);
       }
       Print("BOSEngine initialized successfully");
+      
+      // Initialize CHoCH Engine
+      if(!CHoCHEngine.Initialize(Symbol(), Period(), &MarketStructure, &BOSEngine))
+      {
+         Print("CHoCHEngine initialization failed");
+         return(INIT_FAILED);
+      }
+      Print("CHoCHEngine initialized successfully");
       
       return(INIT_SUCCEEDED);
    }
@@ -150,6 +160,28 @@ void OnTick()
          string direction = (event.direction == BOS_DIRECTION_BULLISH) ? "Bullish" : "Bearish";
          
          PrintFormat("[BOS] %s detected | Time=%s | Bar=%d | Break=%.5f | Swing=%.5f",
+                     direction,
+                     TimeToString(event.timestamp, TIME_DATE|TIME_MINUTES),
+                     event.barIndex,
+                     event.breakPrice,
+                     event.swingPrice);
+      }
+   }
+   
+   // Detect CHoCH on bar 1 (last closed bar)
+   if(CHoCHEngine.DetectCHoCH(1))
+   {
+      datetime currentCHoCHTime = CHoCHEngine.GetLastCHoCH().timestamp;
+      
+      if(currentCHoCHTime != g_lastCHoCHTime)
+      {
+         g_lastCHoCHTime = currentCHoCHTime;
+         
+         CHoCHEvent event = CHoCHEngine.GetLastCHoCH();
+         
+         string direction = (event.direction == CHOCH_DIRECTION_BULLISH) ? "Bullish" : "Bearish";
+         
+         PrintFormat("[CHoCH] %s detected | Time=%s | Bar=%d | Break=%.5f | Swing=%.5f",
                      direction,
                      TimeToString(event.timestamp, TIME_DATE|TIME_MINUTES),
                      event.barIndex,

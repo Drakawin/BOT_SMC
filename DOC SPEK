@@ -1,1 +1,1 @@
-
+DOC02C contains a potential ambiguity between State Transition Rules (lines 218–223) and explanatory text (line 233). The implementation intentionally follows the explicit State Transition Rules because they provide deterministic behavior.

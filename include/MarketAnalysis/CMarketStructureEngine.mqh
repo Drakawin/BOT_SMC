@@ -250,27 +250,23 @@ void CMarketStructureEngine::UpdateStructureState(ENUM_SWING_CLASSIFICATION clas
       return;
    }
    
-   // Bullish structure: HH + HL
+   // Bullish structure: HH or HL → BULLISH
    if(classification == SWING_CLASSIFICATION_HH && type == SWING_TYPE_HIGH)
    {
-      if(m_structureState == STRUCTURE_STATE_UNKNOWN || m_structureState == STRUCTURE_STATE_BULLISH)
-         m_structureState = STRUCTURE_STATE_BULLISH;
+      m_structureState = STRUCTURE_STATE_BULLISH;
    }
    else if(classification == SWING_CLASSIFICATION_HL && type == SWING_TYPE_LOW)
    {
-      if(m_structureState == STRUCTURE_STATE_UNKNOWN || m_structureState == STRUCTURE_STATE_BULLISH)
-         m_structureState = STRUCTURE_STATE_BULLISH;
+      m_structureState = STRUCTURE_STATE_BULLISH;
    }
-   // Bearish structure: LH + LL
+   // Bearish structure: LH or LL → BEARISH
    else if(classification == SWING_CLASSIFICATION_LH && type == SWING_TYPE_HIGH)
    {
-      if(m_structureState == STRUCTURE_STATE_UNKNOWN || m_structureState == STRUCTURE_STATE_BEARISH)
-         m_structureState = STRUCTURE_STATE_BEARISH;
+      m_structureState = STRUCTURE_STATE_BEARISH;
    }
    else if(classification == SWING_CLASSIFICATION_LL && type == SWING_TYPE_LOW)
    {
-      if(m_structureState == STRUCTURE_STATE_UNKNOWN || m_structureState == STRUCTURE_STATE_BEARISH)
-         m_structureState = STRUCTURE_STATE_BEARISH;
+      m_structureState = STRUCTURE_STATE_BEARISH;
    }
 }
 

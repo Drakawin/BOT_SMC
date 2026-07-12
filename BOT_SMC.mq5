@@ -85,6 +85,9 @@
 //| Global Instances                                                 |
 //+------------------------------------------------------------------+
 CBootstrapEngine Bootstrap;
+CMarketStructureEngine MarketStructure;
+CBOSEngine BOSEngine;
+datetime g_lastBOSTime = 0;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -98,6 +101,23 @@ int OnInit()
    if(status == BOOTSTRAP_STATUS_SUCCESS)
    {
       Print("Bootstrap initialization successful");
+      
+      // Initialize Market Structure Engine
+      if(!MarketStructure.Initialize(Symbol(), Period(), 5))
+      {
+         Print("MarketStructure initialization failed");
+         return(INIT_FAILED);
+      }
+      Print("MarketStructure initialized successfully");
+      
+      // Initialize BOS Engine
+      if(!BOSEngine.Initialize(Symbol(), Period(), &MarketStructure))
+      {
+         Print("BOSEngine initialization failed");
+         return(INIT_FAILED);
+      }
+      Print("BOSEngine initialized successfully");
+      
       return(INIT_SUCCEEDED);
    }
    else
@@ -112,6 +132,31 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnTick()
 {
+   // Detect swing points on bar 5 (swingLookback bars back)
+   MarketStructure.DetectSwingHigh(5);
+   MarketStructure.DetectSwingLow(5);
+   
+   // Detect BOS on bar 1 (last closed bar)
+   if(BOSEngine.DetectBOS(1))
+   {
+      datetime currentBOSTime = BOSEngine.GetLastBOSTimestamp();
+      
+      if(currentBOSTime != g_lastBOSTime)
+      {
+         g_lastBOSTime = currentBOSTime;
+         
+         BOSEvent event = BOSEngine.GetLastBOS();
+         
+         string direction = (event.direction == BOS_DIRECTION_BULLISH) ? "Bullish" : "Bearish";
+         
+         PrintFormat("[BOS] %s detected | Time=%s | Bar=%d | Break=%.5f | Swing=%.5f",
+                     direction,
+                     TimeToString(event.timestamp, TIME_DATE|TIME_MINUTES),
+                     event.barIndex,
+                     event.breakPrice,
+                     event.swingPrice);
+      }
+   }
 }
 
 //+------------------------------------------------------------------+

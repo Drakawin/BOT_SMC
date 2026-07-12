@@ -88,6 +88,8 @@ CBootstrapEngine Bootstrap;
 CMarketStructureEngine MarketStructure;
 CBOSEngine BOSEngine;
 CCHoCHEngine CHoCHEngine;
+CLiquidityEngine LiquidityEngine;
+
 datetime g_lastBOSTime = 0;
 datetime g_lastCHoCHTime = 0;
 
@@ -127,6 +129,14 @@ int OnInit()
          return(INIT_FAILED);
       }
       Print("CHoCHEngine initialized successfully");
+
+      // Initialize Liquidity Engine
+      if(!LiquidityEngine.Initialize(Symbol(), Period(), &MarketStructure))
+      {
+         Print("LiquidityEngine initialization failed");
+         return(INIT_FAILED);
+      }
+      Print("LiquidityEngine initialized successfully");
       
       return(INIT_SUCCEEDED);
    }
@@ -143,9 +153,59 @@ int OnInit()
 void OnTick()
 {
    // Detect swing points on bar 5 (swingLookback bars back)
-   MarketStructure.DetectSwingHigh(5);
-   MarketStructure.DetectSwingLow(5);
+   if(MarketStructure.DetectSwingHigh(5))
+   {
+      LiquidityEngine.ProcessNewSwingHigh();
+      
+      // Update Dealing Range
+      LiquidityEngine.UpdateDealingRange();
+   }
    
+   if(MarketStructure.DetectSwingLow(5))
+   {
+      LiquidityEngine.ProcessNewSwingLow();
+      
+      // Update Dealing Range
+      LiquidityEngine.UpdateDealingRange();
+   }
+   
+   // Periodic update of Dealing Range to ensure classifications are fresh
+   static datetime lastRangeUpdate = 0;
+   if(iTime(Symbol(), Period(), 0) != lastRangeUpdate)
+   {
+      lastRangeUpdate = iTime(Symbol(), Period(), 0);
+      LiquidityEngine.UpdateDealingRange();
+      
+      // Print nearest internal targets
+      double currentPrice = iClose(Symbol(), Period(), 0);
+      int nearestBSL = LiquidityEngine.GetNearestInternalBSL(currentPrice);
+      int nearestSSL = LiquidityEngine.GetNearestInternalSSL(currentPrice);
+      
+      if(nearestBSL >= 0)
+      {
+         PrintFormat("[Liquidity] Nearest Internal BSL | Price=%.5f | Time=%s", 
+                     LiquidityEngine.GetLevel(nearestBSL).price,
+                     TimeToString(LiquidityEngine.GetLevel(nearestBSL).timestamp, TIME_DATE|TIME_MINUTES));
+      }
+      if(nearestSSL >= 0)
+      {
+         PrintFormat("[Liquidity] Nearest Internal SSL | Price=%.5f | Time=%s", 
+                     LiquidityEngine.GetLevel(nearestSSL).price,
+                     TimeToString(LiquidityEngine.GetLevel(nearestSSL).timestamp, TIME_DATE|TIME_MINUTES));
+      }
+   }
+   
+   // Sweep Engine Evaluation on bar 1 (last closed bar)
+   // We do this via periodic check on new bar open, or directly every tick checking bar 1.
+   // To avoid duplicate checks on the same bar, we use a static timestamp:
+   static datetime lastSweepCheckTime = 0;
+   datetime bar1Time = iTime(Symbol(), Period(), 1);
+   if(bar1Time != 0 && bar1Time != lastSweepCheckTime)
+   {
+      lastSweepCheckTime = bar1Time;
+      LiquidityEngine.CheckSweepsAndConsumption(1);
+   }
+
    // Detect BOS on bar 1 (last closed bar)
    if(BOSEngine.DetectBOS(1))
    {
@@ -197,6 +257,7 @@ void OnTick()
 void OnDeinit(const int reason)
 {
    Print("BOT_SMC shutting down...");
+   Print("Total Liquidity Levels generated: ", LiquidityEngine.GetLevelCount());
    Print("BOT_SMC shutdown complete");
 }
 //+------------------------------------------------------------------+

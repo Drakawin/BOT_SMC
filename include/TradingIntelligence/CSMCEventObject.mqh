@@ -6,7 +6,6 @@
 #ifndef CSMCEVENTOBJECT_MQH
 #define CSMCEVENTOBJECT_MQH
 
-#include "CIdentifierGeneration.mqh"
 
 enum ENUM_SMC_EVENT_TYPE
 {
@@ -49,6 +48,23 @@ enum ENUM_EVENT_PRIORITY
    PRIORITY_HIGH = 2
 };
 
+// --- TAMBAHKAN INI DI SINI ---
+string GenerateUUID()
+{
+   MathSrand(GetTickCount() + (int)TimeLocal());
+   string uuid = "";
+   string hex = "0123456789abcdef";
+   for(int i = 0; i < 36; i++)
+   {
+      if(i == 8 || i == 13 || i == 18 || i == 23) uuid += "-";
+      else if(i == 14) uuid += "4";
+      else if(i == 19) uuid += StringSubstr(hex, MathRand() % 4 + 8, 1);
+      else uuid += StringSubstr(hex, MathRand() % 16, 1);
+   }
+   return uuid;
+}
+// -----------------------------
+
 //+------------------------------------------------------------------+
 //| Base Class for all SMC Events (Immutable interface)              |
 //+------------------------------------------------------------------+
@@ -69,7 +85,7 @@ protected:
 public:
    CSMCEvent(ENUM_MODULE_ID source, ENUM_SMC_EVENT_TYPE type, ENUM_TIMEFRAMES tf, string sym, ENUM_EVENT_PRIORITY prio)
    {
-      m_eventId = CIdentifierGeneration::GenerateUUID();
+      m_eventId = GenerateUUID();
       m_sourceModule = source;
       m_eventType = type;
       m_timestamp = TimeCurrent();

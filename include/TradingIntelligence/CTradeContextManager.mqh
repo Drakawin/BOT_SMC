@@ -40,6 +40,7 @@ struct STradeContextSnapshot
    CFVGEngine*              fvgEngine;
    CPremiumDiscountEngine*  pdEngine;
    CHTFSyncEngine*          htfEngine;
+   CCHoCHEngine*            ltfChochEngine; // Added for M15 Trigger
 };
 
 class CTradeContextManager : public IEventSubscriber
@@ -65,7 +66,8 @@ public:
                                       COrderBlockEngine* ob,
                                       CFVGEngine* fvg,
                                       CPremiumDiscountEngine* pd,
-                                      CHTFSyncEngine* htf);
+                                      CHTFSyncEngine* htf,
+                                      CCHoCHEngine* ltfChoch);
                                       
    STradeContextSnapshot GetSnapshot() const { return m_currentSnapshot; }
 };
@@ -115,7 +117,8 @@ void CTradeContextManager::BuildSnapshot(CMarketStructureEngine* ms,
                                          COrderBlockEngine* ob,
                                          CFVGEngine* fvg,
                                          CPremiumDiscountEngine* pd,
-                                         CHTFSyncEngine* htf)
+                                         CHTFSyncEngine* htf,
+                                         CCHoCHEngine* ltfChoch)
 {
    if(!m_initialized) return;
    
@@ -140,6 +143,7 @@ void CTradeContextManager::BuildSnapshot(CMarketStructureEngine* ms,
    m_currentSnapshot.fvgEngine = fvg;
    m_currentSnapshot.pdEngine = pd;
    m_currentSnapshot.htfEngine = htf;
+   m_currentSnapshot.ltfChochEngine = ltfChoch;
 }
 
 #endif

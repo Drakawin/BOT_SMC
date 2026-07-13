@@ -48,6 +48,7 @@
 #include <TradingIntelligence\CSMCEventBus.mqh>
 #include <TradingIntelligence\CTradeContextManager.mqh>
 #include <TradingIntelligence\CConfluenceEngine.mqh>
+#include <TradingIntelligence\CConfluenceRules.mqh>
 #include <TradingIntelligence\CEntryDecisionEngine.mqh>
 #include <TradingIntelligence\CTradeStateMachine.mqh>
 
@@ -95,6 +96,11 @@ CFVGEngine FVGEngine;
 COrderBlockEngine OrderBlockEngine;
 CPremiumDiscountEngine PremiumDiscountEngine;
 CHTFSyncEngine HTFSyncEngine;
+
+// --- M15 Execution Engines ---
+CMarketStructureEngine M15Structure;
+CBOSEngine M15Bos; // M15 CHoCH needs a BOS engine dependency
+CCHoCHEngine M15Choch;
 
 // --- Layer 4 Engines ---
 CSMCEventBus EventBus;
@@ -181,6 +187,24 @@ int OnInit()
       }
       Print("HTFSyncEngine initialized successfully");
       
+      // Initialize M15 Execution Engines
+      if(!M15Structure.Initialize(Symbol(), PERIOD_M15, 2))
+      {
+         Print("M15Structure initialization failed");
+         return(INIT_FAILED);
+      }
+      if(!M15Bos.Initialize(Symbol(), PERIOD_M15, &M15Structure))
+      {
+         Print("M15Bos initialization failed");
+         return(INIT_FAILED);
+      }
+      if(!M15Choch.Initialize(Symbol(), PERIOD_M15, &M15Structure, &M15Bos))
+      {
+         Print("M15Choch initialization failed");
+         return(INIT_FAILED);
+      }
+      Print("M15 Execution Engines initialized successfully");
+      
       // Initialize Trading Intelligence Foundation (Layer 4)
       if(!ContextManager.Initialize())
       {
@@ -195,7 +219,16 @@ int OnInit()
          Print("ConfluenceEngine initialization failed");
          return(INIT_FAILED);
       }
-      Print("ConfluenceEngine initialized successfully (Stage 3 Pipeline Ready)");
+      
+      // Register the 6 Rules of Confluence
+      ConfluenceEngine.AddCondition(new CConditionDirectionalBias());
+      ConfluenceEngine.AddCondition(new CConditionRetracement());
+      ConfluenceEngine.AddCondition(new CConditionInstitutionalReference());
+      ConfluenceEngine.AddCondition(new CConditionImbalance());
+      ConfluenceEngine.AddCondition(new CConditionLiquiditySweep());
+      ConfluenceEngine.AddCondition(new CConditionLTFTrigger());
+      
+      Print("ConfluenceEngine initialized successfully (Stage 3 Pipeline Ready with 6 Rules)");
       
       return(INIT_SUCCEEDED);
    }
@@ -290,17 +323,36 @@ void OnTick()
       OrderBlockEngine.CheckBreakerMitigation(1);
       
       // Build Layer 4 Context Snapshot at the end of the closed bar evaluation
-      ContextManager.BuildSnapshot(&MarketStructure, &BOSEngine, &CHoCHEngine, &LiquidityEngine, &OrderBlockEngine, &FVGEngine, &PremiumDiscountEngine, &HTFSyncEngine);
+      ContextManager.BuildSnapshot(&MarketStructure, &BOSEngine, &CHoCHEngine, &LiquidityEngine, &OrderBlockEngine, &FVGEngine, &PremiumDiscountEngine, &HTFSyncEngine, &M15Choch);
       
       // Pass the frozen snapshot to the Confluence Engine (Stage 3)
       SConfluenceResult confResult = ConfluenceEngine.EvaluateContext(ContextManager.GetSnapshot());
       
       if(confResult.isAccepted)
       {
-         PrintFormat("[Decision Pipeline] Context ACCEPTED! Bias=%s", EnumToString(confResult.evaluatedBias));
+         PrintFormat("[Decision Pipeline] Context ACCEPTED! Bias=%s | OB Idx: %d | FVG Idx: %d", 
+                     EnumToString(confResult.evaluatedBias), confResult.selectedObIndex, confResult.selectedFvgIndex);
+      }
+      else
+      {
+         // Optional: Print rejection reason for debugging
+         PrintFormat("[Decision Pipeline] Rejected at: %s", confResult.failedConditionName);
       }
    }
+   
+   // --- M15 Execution Timeframe Checks ---
+   // To keep M15 accurate, we evaluate M15 structure on M15 bar closes.
+   static datetime lastM15BarTime = 0;
+   datetime currentM15Time = iTime(Symbol(), PERIOD_M15, 1);
+   if(currentM15Time != 0 && currentM15Time != lastM15BarTime)
+   {
+      lastM15BarTime = currentM15Time;
+      M15Structure.DetectSwingHigh(1); // Detect swings with SFS=2
+      M15Structure.DetectSwingLow(1);
+      M15Choch.DetectCHoCH(1);
+   }
 
+   // --- H1 Detection Block ---
    // Detect BOS on bar 1 (last closed bar)
    if(BOSEngine.DetectBOS(1))
    {

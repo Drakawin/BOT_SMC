@@ -36,19 +36,20 @@
 #include <MarketAnalysis\CCHoCHEngine.mqh>
 #include <MarketAnalysis\CLiquidityEngine.mqh>
 #include <MarketAnalysis\COrderBlockEngine.mqh>
-
+#include <MarketAnalysis\CPremiumDiscountEngine.mqh>
+#include <MarketAnalysis\CHTFSyncEngine.mqh>
 #include <MarketAnalysis\COrderBlockValidator.mqh>
 #include <MarketAnalysis\CFVGEngine.mqh>
 
 //+------------------------------------------------------------------+
 //| Trading Intelligence (Layer 4)                                   |
 //+------------------------------------------------------------------+
+#include <TradingIntelligence\CSMCEventObject.mqh>
+#include <TradingIntelligence\CSMCEventBus.mqh>
 #include <TradingIntelligence\CTradeContextManager.mqh>
 #include <TradingIntelligence\CConfluenceEngine.mqh>
 #include <TradingIntelligence\CEntryDecisionEngine.mqh>
 #include <TradingIntelligence\CTradeStateMachine.mqh>
-#include <TradingIntelligence\CSMCEventObject.mqh>
-#include <TradingIntelligence\CSMCEventBus.mqh>
 
 //+------------------------------------------------------------------+
 //| Execution (Layer 5)                                              |
@@ -92,7 +93,13 @@ CCHoCHEngine CHoCHEngine;
 CLiquidityEngine LiquidityEngine;
 CFVGEngine FVGEngine;
 COrderBlockEngine OrderBlockEngine;
+CPremiumDiscountEngine PremiumDiscountEngine;
+CHTFSyncEngine HTFSyncEngine;
 
+// --- Layer 4 Engines ---
+CSMCEventBus EventBus;
+CTradeContextManager ContextManager;
+CConfluenceEngine ConfluenceEngine;
 
 datetime g_lastBOSTime = 0;
 datetime g_lastCHoCHTime = 0;
@@ -158,6 +165,37 @@ int OnInit()
       }
       Print("OrderBlockEngine initialized successfully");
       
+      // Initialize Premium Discount Engine
+      if(!PremiumDiscountEngine.Initialize())
+      {
+         Print("PremiumDiscountEngine initialization failed");
+         return(INIT_FAILED);
+      }
+      Print("PremiumDiscountEngine initialized successfully");
+      
+      // Initialize HTF Bias & MTF Sync Engine
+      if(!HTFSyncEngine.Initialize(Symbol(), PERIOD_H4, 2))
+      {
+         Print("HTFSyncEngine initialization failed");
+         return(INIT_FAILED);
+      }
+      Print("HTFSyncEngine initialized successfully");
+      
+      // Initialize Trading Intelligence Foundation (Layer 4)
+      if(!ContextManager.Initialize())
+      {
+         Print("ContextManager initialization failed");
+         return(INIT_FAILED);
+      }
+      EventBus.Subscribe(&ContextManager);
+      Print("EventBus & ContextManager initialized successfully");
+      
+      if(!ConfluenceEngine.Initialize())
+      {
+         Print("ConfluenceEngine initialization failed");
+         return(INIT_FAILED);
+      }
+      Print("ConfluenceEngine initialized successfully (Stage 3 Pipeline Ready)");
       
       return(INIT_SUCCEEDED);
    }
@@ -177,18 +215,29 @@ void OnTick()
    if(MarketStructure.DetectSwingHigh(5))
    {
       LiquidityEngine.ProcessNewSwingHigh();
-      
-      // Update Dealing Range
       LiquidityEngine.UpdateDealingRange();
+      PremiumDiscountEngine.UpdateRange(MarketStructure.GetLastSwingHighPrice(), MarketStructure.GetLastSwingLowPrice());
+      if(false)
+      {
+         PrintFormat("[Spatial] Dealing Range Updated | High: %.5f | Low: %.5f | Equilibrium: %.5f", 
+                     PremiumDiscountEngine.GetRangeHigh(), PremiumDiscountEngine.GetRangeLow(), PremiumDiscountEngine.GetEquilibrium());
+      }
    }
    
    if(MarketStructure.DetectSwingLow(5))
    {
       LiquidityEngine.ProcessNewSwingLow();
-      
-      // Update Dealing Range
       LiquidityEngine.UpdateDealingRange();
+      PremiumDiscountEngine.UpdateRange(MarketStructure.GetLastSwingHighPrice(), MarketStructure.GetLastSwingLowPrice());
+      if(false)
+      {
+         PrintFormat("[Spatial] Dealing Range Updated | High: %.5f | Low: %.5f | Equilibrium: %.5f", 
+                     PremiumDiscountEngine.GetRangeHigh(), PremiumDiscountEngine.GetRangeLow(), PremiumDiscountEngine.GetEquilibrium());
+      }
    }
+   
+   // Evaluate Multi-Timeframe Synchronization
+   HTFSyncEngine.Update(&MarketStructure);
    
    // Periodic update of Dealing Range to ensure classifications are fresh
    static datetime lastRangeUpdate = 0;
@@ -239,6 +288,17 @@ void OnTick()
       
       // Evaluate Breaker Block Mitigations
       OrderBlockEngine.CheckBreakerMitigation(1);
+      
+      // Build Layer 4 Context Snapshot at the end of the closed bar evaluation
+      ContextManager.BuildSnapshot(&MarketStructure, &BOSEngine, &CHoCHEngine, &LiquidityEngine, &OrderBlockEngine, &FVGEngine, &PremiumDiscountEngine, &HTFSyncEngine);
+      
+      // Pass the frozen snapshot to the Confluence Engine (Stage 3)
+      SConfluenceResult confResult = ConfluenceEngine.EvaluateContext(ContextManager.GetSnapshot());
+      
+      if(confResult.isAccepted)
+      {
+         PrintFormat("[Decision Pipeline] Context ACCEPTED! Bias=%s", EnumToString(confResult.evaluatedBias));
+      }
    }
 
    // Detect BOS on bar 1 (last closed bar)

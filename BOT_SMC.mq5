@@ -36,6 +36,7 @@
 #include <MarketAnalysis\CCHoCHEngine.mqh>
 #include <MarketAnalysis\CLiquidityEngine.mqh>
 #include <MarketAnalysis\COrderBlockEngine.mqh>
+
 #include <MarketAnalysis\COrderBlockValidator.mqh>
 #include <MarketAnalysis\CFVGEngine.mqh>
 
@@ -90,6 +91,8 @@ CBOSEngine BOSEngine;
 CCHoCHEngine CHoCHEngine;
 CLiquidityEngine LiquidityEngine;
 CFVGEngine FVGEngine;
+COrderBlockEngine OrderBlockEngine;
+
 
 datetime g_lastBOSTime = 0;
 datetime g_lastCHoCHTime = 0;
@@ -146,6 +149,15 @@ int OnInit()
          return(INIT_FAILED);
       }
       Print("FVGEngine initialized successfully");
+      
+      // Initialize Order Block Engine
+      if(!OrderBlockEngine.Initialize(Symbol(), Period()))
+      {
+         Print("OrderBlockEngine initialization failed");
+         return(INIT_FAILED);
+      }
+      Print("OrderBlockEngine initialized successfully");
+      
       
       return(INIT_SUCCEEDED);
    }
@@ -221,6 +233,12 @@ void OnTick()
       
       // Check FVG Fills using the newly closed bar
       FVGEngine.CheckFills(1);
+      
+      // Evaluate Order Block Mitigations and Invalidations
+      OrderBlockEngine.CheckMitigationAndInvalidation(1);
+      
+      // Evaluate Breaker Block Mitigations
+      OrderBlockEngine.CheckBreakerMitigation(1);
    }
 
    // Detect BOS on bar 1 (last closed bar)
@@ -242,6 +260,12 @@ void OnTick()
                      event.barIndex,
                      event.breakPrice,
                      event.swingPrice);
+                     
+         // Trigger OB Detection on the breakout bar
+         OrderBlockEngine.DetectOrderBlock(event.barIndex, (event.direction == BOS_DIRECTION_BULLISH) ? OB_DIRECTION_BULLISH : OB_DIRECTION_BEARISH);
+         
+         // Trigger Breaker Promotion check (Opposite BOS vs Invalidated OB)
+         OrderBlockEngine.DetectBreakerBlock(event.barIndex, (event.direction == BOS_DIRECTION_BULLISH) ? OB_DIRECTION_BULLISH : OB_DIRECTION_BEARISH);
       }
    }
    
@@ -264,6 +288,12 @@ void OnTick()
                      event.barIndex,
                      event.breakPrice,
                      event.swingPrice);
+                     
+         // Trigger OB Detection on the breakout bar
+         OrderBlockEngine.DetectOrderBlock(event.barIndex, (event.direction == CHOCH_DIRECTION_BULLISH) ? OB_DIRECTION_BULLISH : OB_DIRECTION_BEARISH);
+         
+         // Trigger Breaker Promotion check (Opposite CHoCH vs Invalidated OB)
+         OrderBlockEngine.DetectBreakerBlock(event.barIndex, (event.direction == CHOCH_DIRECTION_BULLISH) ? OB_DIRECTION_BULLISH : OB_DIRECTION_BEARISH);
       }
    }
 }

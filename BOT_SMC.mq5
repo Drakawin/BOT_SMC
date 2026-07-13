@@ -106,6 +106,8 @@ CCHoCHEngine M15Choch;
 CSMCEventBus EventBus;
 CTradeContextManager ContextManager;
 CConfluenceEngine ConfluenceEngine;
+CEntryDecisionEngine EntryDecisionEngine;
+CTradeStateMachine TradeStateMachine;
 
 datetime g_lastBOSTime = 0;
 datetime g_lastCHoCHTime = 0;
@@ -230,6 +232,20 @@ int OnInit()
       
       Print("ConfluenceEngine initialized successfully (Stage 3 Pipeline Ready with 6 Rules)");
       
+      if(!EntryDecisionEngine.Initialize())
+      {
+         Print("EntryDecisionEngine initialization failed");
+         return(INIT_FAILED);
+      }
+      Print("EntryDecisionEngine initialized successfully (Stage 4 Ready)");
+      
+      if(!TradeStateMachine.Initialize())
+      {
+         Print("TradeStateMachine initialization failed");
+         return(INIT_FAILED);
+      }
+      Print("TradeStateMachine initialized successfully (Layer 6 Lifecycle Ready)");
+      
       return(INIT_SUCCEEDED);
    }
    else
@@ -321,23 +337,8 @@ void OnTick()
       
       // Evaluate Breaker Block Mitigations
       OrderBlockEngine.CheckBreakerMitigation(1);
+
       
-      // Build Layer 4 Context Snapshot at the end of the closed bar evaluation
-      ContextManager.BuildSnapshot(&MarketStructure, &BOSEngine, &CHoCHEngine, &LiquidityEngine, &OrderBlockEngine, &FVGEngine, &PremiumDiscountEngine, &HTFSyncEngine, &M15Choch);
-      
-      // Pass the frozen snapshot to the Confluence Engine (Stage 3)
-      SConfluenceResult confResult = ConfluenceEngine.EvaluateContext(ContextManager.GetSnapshot());
-      
-      if(confResult.isAccepted)
-      {
-         PrintFormat("[Decision Pipeline] Context ACCEPTED! Bias=%s | OB Idx: %d | FVG Idx: %d", 
-                     EnumToString(confResult.evaluatedBias), confResult.selectedObIndex, confResult.selectedFvgIndex);
-      }
-      else
-      {
-         // Optional: Print rejection reason for debugging
-         PrintFormat("[Decision Pipeline] Rejected at: %s", confResult.failedConditionName);
-      }
    }
    
    // --- M15 Execution Timeframe Checks ---
@@ -347,9 +348,34 @@ void OnTick()
    if(currentM15Time != 0 && currentM15Time != lastM15BarTime)
    {
       lastM15BarTime = currentM15Time;
-      M15Structure.DetectSwingHigh(1); // Detect swings with SFS=2
-      M15Structure.DetectSwingLow(1);
-      M15Choch.DetectCHoCH(1);
+      M15Structure.DetectSwingHigh(5); // Detect swings with SFS=2
+      M15Structure.DetectSwingLow(5);
+      M15Bos.DetectBOS(1);
+      if(M15Choch.DetectCHoCH(1)) { PrintFormat("[M15 Trigger] CHoCH Detected! Direction: %s", EnumToString(M15Choch.GetPrevailingDirection())); }
+
+      // Build Layer 4 Context Snapshot at the end of the M15 closed bar evaluation
+      // This mixes the static H1 Structural Context with the fresh M15 Trigger Context
+      ContextManager.BuildSnapshot(&MarketStructure, &BOSEngine, &CHoCHEngine, &LiquidityEngine, &OrderBlockEngine, &FVGEngine, &PremiumDiscountEngine, &HTFSyncEngine, &M15Choch);
+      
+      // Pass the frozen snapshot to the Confluence Engine (Stage 3)
+      SConfluenceResult confResult = ConfluenceEngine.EvaluateContext(ContextManager.GetSnapshot());
+      
+      // Pass the Confluence Result to the Entry Decision Engine (Stage 4)
+      SDecisionOutput decision = EntryDecisionEngine.EvaluateDecision(confResult, currentM15Time);
+      
+      if(decision.decision != DECISION_NO_ENTRY)
+      {
+         PrintFormat("[Stage 4 Final Decision] SIGNAL GENERATED: %s | Logic: %s | ID: %s", 
+                     EnumToString(decision.decision), decision.decisionLogicTrace, TradeStateMachine.GetActiveRecord().decisionId);
+                     
+         // Hand over to Trade State Machine
+         TradeStateMachine.ProcessNewDecision(decision);
+      }
+      else
+      {
+         // Optional: Print rejection reason for debugging
+         PrintFormat("[Decision Pipeline] Rejected at: %s", confResult.failedConditionName);
+      }
    }
 
    // --- H1 Detection Block ---

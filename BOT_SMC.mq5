@@ -50,6 +50,7 @@
 #include <TradingIntelligence\CConfluenceEngine.mqh>
 #include <TradingIntelligence\CConfluenceRules.mqh>
 #include <TradingIntelligence\CEntryDecisionEngine.mqh>
+#include <TradingIntelligence\CRiskEngine.mqh>
 #include <TradingIntelligence\CTradeStateMachine.mqh>
 
 //+------------------------------------------------------------------+
@@ -107,6 +108,7 @@ CSMCEventBus EventBus;
 CTradeContextManager ContextManager;
 CConfluenceEngine ConfluenceEngine;
 CEntryDecisionEngine EntryDecisionEngine;
+CRiskEngine RiskEngine;
 CTradeStateMachine TradeStateMachine;
 
 datetime g_lastBOSTime = 0;
@@ -118,6 +120,7 @@ datetime g_lastCHoCHTime = 0;
 int OnInit()
 {
    Print("BOT_SMC starting...");
+   MathSrand(GetTickCount()); // Initialize pseudo-random seed once for UUIDs
    
    ENUM_BOOTSTRAP_STATUS status = Bootstrap.Initialize();
    
@@ -238,6 +241,14 @@ int OnInit()
          return(INIT_FAILED);
       }
       Print("EntryDecisionEngine initialized successfully (Stage 4 Ready)");
+      
+      if(!RiskEngine.Initialize(Symbol(), 20, 15.0, 0.01, 2.0))
+      {
+         Print("RiskEngine initialization failed");
+         return(INIT_FAILED);
+      }
+      Print("RiskEngine initialized successfully");
+      PrintFormat("Broker _Point Value for %s is: %f", Symbol(), SymbolInfoDouble(Symbol(), SYMBOL_POINT));
       
       if(!TradeStateMachine.Initialize())
       {
@@ -365,11 +376,21 @@ void OnTick()
       
       if(decision.decision != DECISION_NO_ENTRY)
       {
-         PrintFormat("[Stage 4 Final Decision] SIGNAL GENERATED: %s | Logic: %s | ID: %s", 
-                     EnumToString(decision.decision), decision.decisionLogicTrace, TradeStateMachine.GetActiveRecord().decisionId);
-                     
-         // Hand over to Trade State Machine
-         TradeStateMachine.ProcessNewDecision(decision);
+         // Pre-Execution Risk Calculation
+         SValidatedEntry validEntry = RiskEngine.ValidateAndCalculate(decision, ContextManager.GetSnapshot());
+         
+         if(validEntry.isValid)
+         {
+                        
+            // Hand over to Trade State Machine
+            TradeStateMachine.ProcessNewDecision(decision);
+            PrintFormat("[Stage 4 Final Decision] SIGNAL GENERATED: %s | Entry: %.5f | SL: %.5f | TP: %.5f | Lot: %.2f | ID: %s", 
+                        EnumToString(decision.decision), validEntry.entryPrice, validEntry.stopLoss, validEntry.takeProfit, validEntry.lotSize, TradeStateMachine.GetActiveRecord().decisionId);
+         }
+         else
+         {
+            PrintFormat("[Risk Engine] Trade REJECTED | Reason: %s", validEntry.rejectReason);
+         }
       }
       else
       {
